@@ -417,7 +417,6 @@ def ext_pillar(minion_id,  # pylint: disable=W0613
     if os.path.isfile(config_file):
         import salt.utils.yaml
         try:
-            #open(config_file, 'r') as raw_config:
             config = _render_template(config_file) or {}
             opts = salt.utils.yaml.safe_load(config) or {}
             opts['conf_file'] = config_file
