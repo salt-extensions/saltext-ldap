@@ -8,16 +8,11 @@ I'm leaving it for now, but this should really be gutted and replaced
 with something sensible.
 """
 import copy
-import logging
 
+import pytest
 import salt.states.ldap
 from salt.utils.oset import OrderedSet
 from salt.utils.stringutils import to_bytes
-from tests.support.mixins import LoaderModuleMockMixin
-from tests.support.unit import TestCase
-
-log = logging.getLogger(__name__)
-
 
 # emulates the LDAP database.  each key is the DN of an entry and it
 # maps to a dict which maps attribute names to sets of values.
@@ -161,224 +156,232 @@ def _dump_db(d=None):
     return {dn: {attr: list(d[dn][attr]) for attr in d[dn]} for dn in d}
 
 
-class LDAPTestCase(TestCase, LoaderModuleMockMixin):
-    def setup_loader_modules(self):
-        salt_dunder = {}
-        for fname in ("connect", "search", "add", "delete", "change", "modify"):
-            salt_dunder["ldap3.{}".format(fname)] = globals()["_dummy_" + fname]
-        return {
-            salt.states.ldap: {"__opts__": {"test": False}, "__salt__": salt_dunder}
-        }
+@pytest.fixture
+def configure_loader_modules():
+    salt_dunder = {}
+    for fname in ("connect", "search", "add", "delete", "change", "modify"):
+        salt_dunder["ldap3.{}".format(fname)] = globals()["_dummy_" + fname]
+    return {salt.states.ldap: {"__opts__": {"test": False}, "__salt__": salt_dunder}}
 
-    def _test_helper(self, init_db, expected_ret, replace, delete_others=False):
-        _init_db(copy.deepcopy(init_db))
-        old = _dump_db()
-        new = _dump_db()
-        expected_db = copy.deepcopy(init_db)
-        for dn, attrs in replace.items():
-            for attr, vals in attrs.items():
-                vals = [to_bytes(val) for val in vals]
-                if vals:
-                    new.setdefault(dn, {})[attr] = list(OrderedSet(vals))
-                    expected_db.setdefault(dn, {})[attr] = OrderedSet(vals)
-                elif dn in expected_db:
-                    new[dn].pop(attr, None)
-                    expected_db[dn].pop(attr, None)
-            if not expected_db.get(dn, {}):
-                new.pop(dn, None)
-                expected_db.pop(dn, None)
-        if delete_others:
-            dn_to_delete = OrderedSet()
-            for dn, attrs in expected_db.items():
-                if dn in replace:
-                    to_delete = OrderedSet()
-                    for attr, vals in attrs.items():
-                        if attr not in replace[dn]:
-                            to_delete.add(attr)
-                    for attr in to_delete:
-                        del attrs[attr]
-                        del new[dn][attr]
-                    if not attrs:
-                        dn_to_delete.add(dn)
-            for dn in dn_to_delete:
-                del new[dn]
-                del expected_db[dn]
-        name = "ldapi:///"
-        expected_ret["name"] = name
-        expected_ret.setdefault("result", True)
-        expected_ret.setdefault("comment", "Successfully updated LDAP entries")
-        expected_ret.setdefault(
-            "changes",
-            {
-                dn: {
-                    "old": {
-                        attr: vals
-                        for attr, vals in old[dn].items()
-                        if vals != new.get(dn, {}).get(attr, ())
-                    }
-                    if dn in old
-                    else None,
-                    "new": {
-                        attr: vals
-                        for attr, vals in new[dn].items()
-                        if vals != old.get(dn, {}).get(attr, ())
-                    }
-                    if dn in new
-                    else None,
+
+def _test_helper(init_db, expected_ret, replace, delete_others=False):
+    _init_db(copy.deepcopy(init_db))
+    old = _dump_db()
+    new = _dump_db()
+    expected_db = copy.deepcopy(init_db)
+    for dn, attrs in replace.items():
+        for attr, vals in attrs.items():
+            vals = [to_bytes(val) for val in vals]
+            if vals:
+                new.setdefault(dn, {})[attr] = list(OrderedSet(vals))
+                expected_db.setdefault(dn, {})[attr] = OrderedSet(vals)
+            elif dn in expected_db:
+                new[dn].pop(attr, None)
+                expected_db[dn].pop(attr, None)
+        if not expected_db.get(dn, {}):
+            new.pop(dn, None)
+            expected_db.pop(dn, None)
+    if delete_others:
+        dn_to_delete = OrderedSet()
+        for dn, attrs in expected_db.items():
+            if dn in replace:
+                to_delete = OrderedSet()
+                for attr, vals in attrs.items():
+                    if attr not in replace[dn]:
+                        to_delete.add(attr)
+                for attr in to_delete:
+                    del attrs[attr]
+                    del new[dn][attr]
+                if not attrs:
+                    dn_to_delete.add(dn)
+        for dn in dn_to_delete:
+            del new[dn]
+            del expected_db[dn]
+    name = "ldapi:///"
+    expected_ret["name"] = name
+    expected_ret.setdefault("result", True)
+    expected_ret.setdefault("comment", "Successfully updated LDAP entries")
+    expected_ret.setdefault(
+        "changes",
+        {
+            dn: {
+                "old": {
+                    attr: vals
+                    for attr, vals in old[dn].items()
+                    if vals != new.get(dn, {}).get(attr, ())
                 }
-                for dn in replace
-                if old.get(dn, {}) != new.get(dn, {})
-            },
-        )
-        entries = [
-            {dn: [{"replace": attrs}, {"delete_others": delete_others}]}
-            for dn, attrs in replace.items()
-        ]
-        actual = salt.states.ldap.managed(name, entries)
-        self.assertDictEqual(expected_ret, actual)
-        self.assertDictEqual(expected_db, db)
-
-    def _test_helper_success(self, init_db, replace, delete_others=False):
-        self._test_helper(init_db, {}, replace, delete_others)
-
-    def _test_helper_nochange(self, init_db, replace, delete_others=False):
-        expected = {
-            "changes": {},
-            "comment": "LDAP entries already set",
-        }
-        self._test_helper(init_db, expected, replace, delete_others)
-
-    def _test_helper_add(self, init_db, expected_ret, add_items, delete_others=False):
-        _init_db(copy.deepcopy(init_db))
-        old = _dump_db()
-        new = _dump_db()
-        expected_db = copy.deepcopy(init_db)
-        for dn, attrs in add_items.items():
-            for attr, vals in attrs.items():
-                vals = [to_bytes(val) for val in vals]
-
-                vals.extend(old.get(dn, {}).get(attr, OrderedSet()))
-                vals.sort()
-
-                if vals:
-                    new.setdefault(dn, {})[attr] = list(OrderedSet(vals))
-                    expected_db.setdefault(dn, {})[attr] = OrderedSet(vals)
-                elif dn in expected_db:
-                    new[dn].pop(attr, None)
-                    expected_db[dn].pop(attr, None)
-            if not expected_db.get(dn, {}):
-                new.pop(dn, None)
-                expected_db.pop(dn, None)
-        if delete_others:
-            dn_to_delete = OrderedSet()
-            for dn, attrs in expected_db.items():
-                if dn in add_items:
-                    to_delete = OrderedSet()
-                    for attr, vals in attrs.items():
-                        if attr not in add_items[dn]:
-                            to_delete.add(attr)
-                    for attr in to_delete:
-                        del attrs[attr]
-                        del new[dn][attr]
-                    if not attrs:
-                        dn_to_delete.add(dn)
-            for dn in dn_to_delete:
-                del new[dn]
-                del expected_db[dn]
-        name = "ldapi:///"
-        expected_ret["name"] = name
-        expected_ret.setdefault("result", True)
-        expected_ret.setdefault("comment", "Successfully updated LDAP entries")
-        expected_ret.setdefault(
-            "changes",
-            {
-                dn: {
-                    "old": {
-                        attr: vals
-                        for attr, vals in old[dn].items()
-                        if vals != new.get(dn, {}).get(attr, ())
-                    }
-                    if dn in old
-                    else None,
-                    "new": {
-                        attr: vals
-                        for attr, vals in new[dn].items()
-                        if vals != old.get(dn, {}).get(attr, ())
-                    }
-                    if dn in new
-                    else None,
+                if dn in old
+                else None,
+                "new": {
+                    attr: vals
+                    for attr, vals in new[dn].items()
+                    if vals != old.get(dn, {}).get(attr, ())
                 }
-                for dn in add_items
-                if old.get(dn, {}) != new.get(dn, {})
-            },
-        )
-        entries = [
-            {dn: [{"add": attrs}, {"delete_others": delete_others}]}
-            for dn, attrs in add_items.items()
-        ]
-        actual = salt.states.ldap.managed(name, entries)
-        self.assertDictEqual(expected_ret, actual)
-        self.assertDictEqual(expected_db, db)
+                if dn in new
+                else None,
+            }
+            for dn in replace
+            if old.get(dn, {}) != new.get(dn, {})
+        },
+    )
+    entries = [
+        {dn: [{"replace": attrs}, {"delete_others": delete_others}]}
+        for dn, attrs in replace.items()
+    ]
+    actual = salt.states.ldap.managed(name, entries)
+    assert expected_ret == actual
+    assert expected_db == db
 
-    def _test_helper_success_add(self, init_db, add_items, delete_others=False):
-        self._test_helper_add(init_db, {}, add_items, delete_others)
 
-    def test_managed_empty(self):
-        _init_db()
-        name = "ldapi:///"
-        expected = {
-            "name": name,
-            "changes": {},
-            "result": True,
-            "comment": "LDAP entries already set",
-        }
-        actual = salt.states.ldap.managed(name, {})
-        self.assertDictEqual(expected, actual)
+def _test_helper_success(init_db, replace, delete_others=False):
+    _test_helper(init_db, {}, replace, delete_others)
 
-    def test_managed_add_entry(self):
-        self._test_helper_success_add({}, {"dummydn": {"foo": ["bar", "baz"]}})
 
-    def test_managed_add_attr(self):
-        self._test_helper_success_add(
-            _complex_db(), {"dnfoo": {"attrfoo1": ["valfoo1.3"]}}
-        )
+def _test_helper_nochange(init_db, replace, delete_others=False):
+    expected = {
+        "changes": {},
+        "comment": "LDAP entries already set",
+    }
+    _test_helper(init_db, expected, replace, delete_others)
 
-        self._test_helper_success_add(
-            _complex_db(), {"dnfoo": {"attrfoo4": ["valfoo4.1"]}}
-        )
 
-    def test_managed_replace_attr(self):
-        self._test_helper_success(_complex_db(), {"dnfoo": {"attrfoo3": ["valfoo3.1"]}})
+def _test_helper_add(init_db, expected_ret, add_items, delete_others=False):
+    _init_db(copy.deepcopy(init_db))
+    old = _dump_db()
+    new = _dump_db()
+    expected_db = copy.deepcopy(init_db)
+    for dn, attrs in add_items.items():
+        for attr, vals in attrs.items():
+            vals = [to_bytes(val) for val in vals]
 
-    def test_managed_simplereplace(self):
-        self._test_helper_success(_complex_db(), {"dnfoo": {"attrfoo1": ["valfoo1.3"]}})
+            vals.extend(old.get(dn, {}).get(attr, OrderedSet()))
+            vals.sort()
 
-    def test_managed_deleteattr(self):
-        self._test_helper_success(_complex_db(), {"dnfoo": {"attrfoo1": []}})
+            if vals:
+                new.setdefault(dn, {})[attr] = list(OrderedSet(vals))
+                expected_db.setdefault(dn, {})[attr] = OrderedSet(vals)
+            elif dn in expected_db:
+                new[dn].pop(attr, None)
+                expected_db[dn].pop(attr, None)
+        if not expected_db.get(dn, {}):
+            new.pop(dn, None)
+            expected_db.pop(dn, None)
+    if delete_others:
+        dn_to_delete = OrderedSet()
+        for dn, attrs in expected_db.items():
+            if dn in add_items:
+                to_delete = OrderedSet()
+                for attr, vals in attrs.items():
+                    if attr not in add_items[dn]:
+                        to_delete.add(attr)
+                for attr in to_delete:
+                    del attrs[attr]
+                    del new[dn][attr]
+                if not attrs:
+                    dn_to_delete.add(dn)
+        for dn in dn_to_delete:
+            del new[dn]
+            del expected_db[dn]
+    name = "ldapi:///"
+    expected_ret["name"] = name
+    expected_ret.setdefault("result", True)
+    expected_ret.setdefault("comment", "Successfully updated LDAP entries")
+    expected_ret.setdefault(
+        "changes",
+        {
+            dn: {
+                "old": {
+                    attr: vals
+                    for attr, vals in old[dn].items()
+                    if vals != new.get(dn, {}).get(attr, ())
+                }
+                if dn in old
+                else None,
+                "new": {
+                    attr: vals
+                    for attr, vals in new[dn].items()
+                    if vals != old.get(dn, {}).get(attr, ())
+                }
+                if dn in new
+                else None,
+            }
+            for dn in add_items
+            if old.get(dn, {}) != new.get(dn, {})
+        },
+    )
+    entries = [
+        {dn: [{"add": attrs}, {"delete_others": delete_others}]}
+        for dn, attrs in add_items.items()
+    ]
+    actual = salt.states.ldap.managed(name, entries)
+    assert expected_ret == actual
+    assert expected_db == db
 
-    def test_managed_deletenonexistattr(self):
-        self._test_helper_nochange(_complex_db(), {"dnfoo": {"dummyattr": []}})
 
-    def test_managed_deleteentry(self):
-        self._test_helper_success(_complex_db(), {"dnfoo": {}}, True)
+def _test_helper_success_add(init_db, add_items, delete_others=False):
+    _test_helper_add(init_db, {}, add_items, delete_others)
 
-    def test_managed_deletenonexistentry(self):
-        self._test_helper_nochange(_complex_db(), {"dummydn": {}}, True)
 
-    def test_managed_deletenonexistattrinnonexistentry(self):
-        self._test_helper_nochange(_complex_db(), {"dummydn": {"dummyattr": []}})
+def test_managed_empty():
+    _init_db()
+    name = "ldapi:///"
+    expected = {
+        "name": name,
+        "changes": {},
+        "result": True,
+        "comment": "LDAP entries already set",
+    }
+    actual = salt.states.ldap.managed(name, {})
+    assert expected == actual
 
-    def test_managed_add_attr_delete_others(self):
-        self._test_helper_success(
-            _complex_db(), {"dnfoo": {"dummyattr": ["dummyval"]}}, True
-        )
 
-    def test_managed_no_net_change(self):
-        self._test_helper_nochange(
-            _complex_db(), {"dnfoo": {"attrfoo1": ["valfoo1.1", "valfoo1.2"]}}
-        )
+def test_managed_add_entry():
+    _test_helper_success_add({}, {"dummydn": {"foo": ["bar", "baz"]}})
 
-    def test_managed_repeated_values(self):
-        self._test_helper_success(
-            {}, {"dummydn": {"dummyattr": ["dummyval", "dummyval"]}}
-        )
+
+def test_managed_add_attr():
+    _test_helper_success_add(_complex_db(), {"dnfoo": {"attrfoo1": ["valfoo1.3"]}})
+
+    _test_helper_success_add(_complex_db(), {"dnfoo": {"attrfoo4": ["valfoo4.1"]}})
+
+
+def test_managed_replace_attr():
+    _test_helper_success(_complex_db(), {"dnfoo": {"attrfoo3": ["valfoo3.1"]}})
+
+
+def test_managed_simplereplace():
+    _test_helper_success(_complex_db(), {"dnfoo": {"attrfoo1": ["valfoo1.3"]}})
+
+
+def test_managed_deleteattr():
+    _test_helper_success(_complex_db(), {"dnfoo": {"attrfoo1": []}})
+
+
+def test_managed_deletenonexistattr():
+    _test_helper_nochange(_complex_db(), {"dnfoo": {"dummyattr": []}})
+
+
+def test_managed_deleteentry():
+    _test_helper_success(_complex_db(), {"dnfoo": {}}, True)
+
+
+def test_managed_deletenonexistentry():
+    _test_helper_nochange(_complex_db(), {"dummydn": {}}, True)
+
+
+def test_managed_deletenonexistattrinnonexistentry():
+    _test_helper_nochange(_complex_db(), {"dummydn": {"dummyattr": []}})
+
+
+def test_managed_add_attr_delete_others():
+    _test_helper_success(_complex_db(), {"dnfoo": {"dummyattr": ["dummyval"]}}, True)
+
+
+def test_managed_no_net_change():
+    _test_helper_nochange(
+        _complex_db(), {"dnfoo": {"attrfoo1": ["valfoo1.1", "valfoo1.2"]}}
+    )
+
+
+def test_managed_repeated_values():
+    _test_helper_success({}, {"dummydn": {"dummyattr": ["dummyval", "dummyval"]}})
