@@ -80,8 +80,8 @@ jobs:
       - name: Python Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Python Wheel ${{ matrix.host }}
-          path: dist/*$[{ matrix.host }.whl
+          name: Python Wheel ${{ matrix.arch }}
+          path: dist/*${{ matrix.arch }}.whl
           retention-days: 5
 
       - name: Read Version
