@@ -133,14 +133,14 @@ def build_gdb(prefix):
         with pushd(src / dir_name):
             with open("python-ldap.patch", "w") as fp:
                 fp.write(PYTHON_LDAP_PATCH)
-            subprocess.run(["patch", "-p", "1", "-i", "python-ldap.patch"])
+            subprocess.run(["patch", "-p", "1", "-i", "python-ldap.patch"], check=True)
         pip = build / "gdb" / "bin" / "pip3"
         env = os.environ.copy()
         env["RELENV_BUILDENV"] = 1
-        subprocess.run([str(pip), "install", str(src / dir_name)])
+        subprocess.run([str(pip), "install", str(src / dir_name)], check=True)
     else:
         with pushd(src / dir_name):
-            subprocess.run(["make", "install"], check=True)
+            subprocess.run([str(pip), "install", str(src / dir_name)], check=True)
     vendored = pathlib.Path(
         f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored"
     )
