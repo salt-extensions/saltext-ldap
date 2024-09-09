@@ -173,7 +173,7 @@ def build_gdb(prefix):
         f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/_ldap.cpython-310-x86_64-linux-gnu.so",
         (
             f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/"
-            f"saltext/ldap/vendored/_ldap.cpython-310-x86_64-linux-gnu.so",
+            f"saltext/ldap/vendored/_ldap.cpython-310-x86_64-linux-gnu.so"
         ),
     )
     relenv.relocate.main(
