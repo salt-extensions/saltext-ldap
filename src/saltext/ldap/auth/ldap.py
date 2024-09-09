@@ -1,5 +1,7 @@
+# Copyright 2024 Broadcom Corporation
+# SPDX-License-Identifier: Apache-2.0
 """
-Provide authentication using simple LDAP binds
+Provide authentication using simple LDAP binds.
 
 :depends:   - ldap Python module
 """
@@ -7,10 +9,9 @@ Provide authentication using simple LDAP binds
 import itertools
 import logging
 
-from jinja2 import Environment
-
 import salt.utils.data
 import salt.utils.stringutils
+from jinja2 import Environment
 from salt.exceptions import CommandExecutionError, SaltInvocationError
 
 log = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ def _config(key, mandatory=True, opts=None):
         if opts:
             value = opts[f"auth.ldap.{key}"]
         else:
-            value = __opts__[f"auth.ldap.{key}"]
+            value = __opts__[f"auth.ldap.{key}"]  # noqa: F821
     except KeyError:
         try:
             value = __defopts__[f"auth.ldap.{key}"]
@@ -148,7 +149,8 @@ class _LDAPConnection:
 
 def _bind_for_search(anonymous=False, opts=None):
     """
-    Bind with binddn and bindpw only for searching LDAP
+    Bind with binddn and bindpw only for searching LDAP.
+
     :param anonymous: Try binding anonymously
     :param opts: Pass in when __opts__ is not available
     :return: LDAPConnection object
@@ -207,7 +209,7 @@ def _bind_for_search(anonymous=False, opts=None):
 
 def _bind(username, password, anonymous=False, opts=None):
     """
-    Authenticate via an LDAP bind
+    Authenticate via an LDAP bind.
     """
     # Get config params; create connection dictionary
     basedn = _config("basedn", opts=opts)
@@ -335,7 +337,7 @@ def _bind(username, password, anonymous=False, opts=None):
 
 def auth(username, password):
     """
-    Simple LDAP auth
+    Simple LDAP auth.
     """
     if not HAS_LDAP:
         log.error("LDAP authentication requires python-ldap module")
@@ -373,7 +375,7 @@ def auth(username, password):
 
 def groups(username, **kwargs):
     """
-    Authenticate against an LDAP group
+    Authenticate against an LDAP group.
 
     Behavior is highly dependent on if Active Directory is in use.
 
@@ -536,6 +538,7 @@ def groups(username, **kwargs):
 
 def __expand_ldap_entries(entries, opts=None):
     """
+    Expand the config option.
 
     :param entries: ldap subtree in external_auth config option
     :param opts: Opts to use when __opts__ not defined
@@ -606,6 +609,7 @@ def __expand_ldap_entries(entries, opts=None):
 def process_acl(auth_list, opts=None):
     """
     Query LDAP, retrieve list of minion_ids from an OU or other search.
+
     For each minion_id returned from the LDAP search, copy the perms
     matchers into the auth dictionary
     :param auth_list:

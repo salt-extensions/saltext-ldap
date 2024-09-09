@@ -1,3 +1,4 @@
+# Copyright 2024 Broadcom Corporation
 # Copyright 2023-2024 VMware, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -21,9 +22,8 @@ import relenv.fetch
 import relenv.toolchain
 from setuptools.build_meta import *
 
-
 LDAP_VERSION = "2.5.18"
-PYTHON_LDAP_PATCH="""diff --git a/setup.cfg b/setup.cfg
+PYTHON_LDAP_PATCH = """diff --git a/setup.cfg b/setup.cfg
 index fdb32fb..7fd19fb 100644
 --- a/setup.cfg
 +++ b/setup.cfg
@@ -44,6 +44,7 @@ index fdb32fb..7fd19fb 100644
 
 """
 _build_wheel = build_wheel
+
 
 @contextlib.contextmanager
 def pushd(path):
@@ -94,7 +95,6 @@ def build_gdb(prefix):
         with pushd(src / dir_name):
             subprocess.run(["make", "install"], check=True)
 
-
     url = f"https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-{LDAP_VERSION}.tgz"
     archive_name = str(src / pathlib.Path(url).name)
     dir_name = archive_name.split(".tgz")[0]
@@ -141,24 +141,29 @@ def build_gdb(prefix):
     else:
         with pushd(src / dir_name):
             subprocess.run(["make", "install"], check=True)
-    vendored = pathlib.Path(f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored")
+    vendored = pathlib.Path(
+        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored"
+    )
     vendored.mkdir(exist_ok=True)
     (vendored / "__init__.py").touch()
     shutil.copytree(
         f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/ldap",
-        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored/ldap"
+        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored/ldap",
     )
     shutil.copy(
         f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/ldapurl.py",
-        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored/ldapurl.py"
+        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored/ldapurl.py",
     )
     shutil.copy(
         f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/ldif.py",
-        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored/ldif.py"
+        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored/ldif.py",
     )
     shutil.copy(
         f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/_ldap.cpython-310-x86_64-linux-gnu.so",
-        f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/vendored/_ldap.cpython-310-x86_64-linux-gnu.so"
+        (
+            f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/"
+            f"saltext/ldap/vendored/_ldap.cpython-310-x86_64-linux-gnu.so",
+        ),
     )
     relenv.relocate.main(
         f"{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap",
