@@ -77,6 +77,8 @@ jobs:
   test-python-package:
     name: Test Python Package
     needs:
+      - test
+      - build-python-package
       - get-changed-files
     uses: ./.github/workflows/test-package-action.yml
     with:
