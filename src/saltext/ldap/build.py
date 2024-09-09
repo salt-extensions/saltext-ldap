@@ -68,6 +68,9 @@ def build_gdb(prefix):
     src.mkdir(exist_ok=True)
 
     os.environ.update(relenv.buildenv.buildenv(prefix))
+    os.environ["CFLAGS"] = f"{os.environ['CFLAGS'] -I{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/libldap/include"
+    os.environ["CPPFLAGS"] = f"{os.environ['CPPFLAGS'] -I{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/libldap/include"
+    os.environ["LDFLAGS"] = f"{os.environ['LDFLAGS'] -L{os.environ['RELENV_PATH']}/lib/python3.10/site-packages/saltext/ldap/libldap/lib"
     print(f"Build environment: {pprint.pformat(dict(os.environ))}")
     sys.stdout.flush()
 
