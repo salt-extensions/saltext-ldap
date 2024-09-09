@@ -23,6 +23,10 @@ on:
         value: "${{ jobs.build.outputs.version }}"
 
 jobs:
+      steps:
+       - name: Set up QEMU
+         uses: docker/setup-qemu-action@v3
+
   build:
     name: Build Python Wheel
     strategy:
@@ -32,64 +36,73 @@ jobs:
           - aarch64
 
     runs-on:
-      - self-hosted
-      - linux
-      - src-build
-      - ${{ matrix.host }}
+      - ubuntu-latest
 
-    container:
-      image: debian:11
     outputs:
       version: ${{ steps.version.outputs.version }}
+
     steps:
-    - uses: actions/checkout@master
+      - uses: actions/checkout@master
 
-    - name: Update Apt
-      run: >-
-        apt-get update
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-    - name: Install OS Dependencies
-      run: >-
-        apt-get install -y python3
-        python3-pip python3-venv patchelf build-essential m4 texinfo
+      - name: Run in Docker
+        run: |
+          docker run \
+            --rm \
+            -v $(pwd):/${{ github.workspace }} \
+            -w ${{ github.workspace }} \
+            --platform linux/${{ matrix.arch }} \
+            debian:11 \
+            uname -a
 
-    - name: Create virtualenv
-      run: >-
-        python3 -m venv venv
+       #- name: Update Apt
+       #  run: >-
+       #    apt-get update
 
-    - name: Activate virtualenv
-      run: |
-        . venv/bin/activate
-        echo PATH=$PATH >> $GITHUB_ENV
+       #- name: Install OS Dependencies
+       #  run: >-
+       #    apt-get install -y python3
+       #    python3-pip python3-venv patchelf build-essential m4 texinfo
 
-    - name: Python Version
-      run: >-
-        python3 --version
+       #- name: Create virtualenv
+       #  run: >-
+       #    python3 -m venv venv
 
-    - name: Install Python Dependencies
-      run: >-
-        pip install build wheel setuptools pkginfo
+       #- name: Activate virtualenv
+       #  run: |
+       #    . venv/bin/activate
+       #    echo PATH=$PATH >> $GITHUB_ENV
 
-    - name: Echo Build Wheel Command
-      run: echo "${{ inputs.cmd }}"
+       #- name: Python Version
+       #  run: >-
+       #    python3 --version
 
-    - name: Build Wheel
-      run: |
-        ${{ inputs.cmd }}
+       #- name: Install Python Dependencies
+       #  run: >-
+       #    pip install build wheel setuptools pkginfo
 
-    - name: Python Build Artifact
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: dist-${{ matrix.host }}
-        path: dist/*
-        retention-days: 5
+       #- name: Echo Build Wheel Command
+       #  run: echo "${{ inputs.cmd }}"
 
-    - name: Read Version
-      run: >-
-        python3
-        -c
-        "from pkginfo import Wheel; s = Wheel('''$(ls dist/*.whl)'''); print('version='+str(s.version))"
-        >>
-        $GITHUB_OUTPUT
-      id: version
+       #- name: Build Wheel
+       #  run: |
+       #    ${{ inputs.cmd }}
+
+       #- name: Python Build Artifact
+       #  uses: actions/upload-artifact@v3
+       #  if: always()
+       #  with:
+       #    name: dist-${{ matrix.host }}
+       #    path: dist/*
+       #    retention-days: 5
+
+       #- name: Read Version
+       #  run: >-
+       #    python3
+       #    -c
+       #    "from pkginfo import Wheel; s = Wheel('''$(ls dist/*.whl)'''); print('version='+str(s.version))"
+       #    >>
+       #    $GITHUB_OUTPUT
+       #  id: version

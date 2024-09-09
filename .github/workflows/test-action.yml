@@ -16,7 +16,6 @@ jobs:
         runs-on:
           - ubuntu-latest
           - macos-12
-          - macos-13-xlarge
           - windows-latest
 
     name: Unit Test ${{ matrix.runs-on }}
