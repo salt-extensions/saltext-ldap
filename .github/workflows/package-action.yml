@@ -51,7 +51,7 @@ jobs:
             -w ${{ github.workspace }} \
             --platform linux/${{ matrix.arch }} \
             debian:11 \
-            uname -a
+            scripts/build.sh
 
        #- name: Update Apt
        #  run: >-
