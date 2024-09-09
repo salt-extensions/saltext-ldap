@@ -1,0 +1,19 @@
+[build-system]
+requires = [
+    "setuptools",
+    "wheel",
+    "relenv",
+]
+build-backend = "build"
+backend-path = ["src/saltext/ldap"]
+
+[tool.isort]
+skip = "libpython.py"
+
+[tool.black]
+force_exclude = "libpython.py"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]

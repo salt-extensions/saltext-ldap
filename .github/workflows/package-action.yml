@@ -1,0 +1,95 @@
+name: Relenv Python Package
+
+on:
+  workflow_call:
+    inputs:
+      kind:
+        required: false
+        type: string
+        default: dev
+      cmd:
+        required: false
+        type: string
+        description: Command used to build python package
+        default: >-
+          python -m
+          build
+          -C--global-option=egg_info
+          -C--global-option=--tag-build=dev$(git rev-parse --short HEAD)
+          --wheel
+          --outdir dist/
+    outputs:
+      version:
+        value: "${{ jobs.build.outputs.version }}"
+
+jobs:
+  build:
+    name: Build Python Wheel
+    strategy:
+      matrix:
+        host:
+          - x86_64
+          - aarch64
+
+    runs-on:
+      - self-hosted
+      - linux
+      - src-build
+      - ${{ matrix.host }}
+
+    container:
+      image: debian:11
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+    - uses: actions/checkout@master
+
+    - name: Update Apt
+      run: >-
+        apt-get update
+
+    - name: Install OS Dependencies
+      run: >-
+        apt-get install -y python3
+        python3-pip python3-venv patchelf build-essential m4 texinfo
+
+    - name: Create virtualenv
+      run: >-
+        python3 -m venv venv
+
+    - name: Activate virtualenv
+      run: |
+        . venv/bin/activate
+        echo PATH=$PATH >> $GITHUB_ENV
+
+    - name: Python Version
+      run: >-
+        python3 --version
+
+    - name: Install Python Dependencies
+      run: >-
+        pip install build wheel setuptools pkginfo
+
+    - name: Echo Build Wheel Command
+      run: echo "${{ inputs.cmd }}"
+
+    - name: Build Wheel
+      run: |
+        ${{ inputs.cmd }}
+
+    - name: Python Build Artifact
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: dist-${{ matrix.host }}
+        path: dist/*
+        retention-days: 5
+
+    - name: Read Version
+      run: >-
+        python3
+        -c
+        "from pkginfo import Wheel; s = Wheel('''$(ls dist/*.whl)'''); print('version='+str(s.version))"
+        >>
+        $GITHUB_OUTPUT
+      id: version

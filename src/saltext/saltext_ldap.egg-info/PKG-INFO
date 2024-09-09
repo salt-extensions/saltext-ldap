@@ -1,0 +1,19 @@
+Metadata-Version: 2.1
+Name: saltext-ldap
+Version: 0.0.1
+Summary: ldap salt extension
+Home-page: https://github.com/salt-extensions/saltext-ldap
+Author: Daniel A. Wozniak
+Author-email: <dwozniak@broadcom.com>
+Project-URL: Source Code, https://github.com/saltstack/relative-environment-for-python
+Project-URL: Bug Tracekr, https://github.com/saltstack/relative-environment-for-python/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Operating System :: POSIX :: Linux
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+
+saltext-ldap
+============
