@@ -23,10 +23,6 @@ on:
         value: "${{ jobs.build.outputs.version }}"
 
 jobs:
-      steps:
-       - name: Set up QEMU
-         uses: docker/setup-qemu-action@v3
-
   build:
     name: Build Python Wheel
     strategy:
