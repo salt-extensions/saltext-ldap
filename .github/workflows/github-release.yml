@@ -9,7 +9,7 @@ on:
 
 jobs:
   release:
-    name: Publish Python Wheel
+    name: Create Github Release
     runs-on: ubuntu-latest
     steps:
       - name: Download Source Tarball
@@ -50,8 +50,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: dist/saltext.ldap-${{ inputs.version }}.tar.gz
-          asset_name: saltext.ldap-${{ inputs.version }}.tar.gz
+          asset_path: dist/saltext_ldap-${{ inputs.version }}.tar.gz
+          asset_name: saltext_ldap-${{ inputs.version }}.tar.gz
           asset_content_type: application/tar+gzip
 
       - name: Upload x86-64 Wheel

@@ -4,7 +4,7 @@
 import importlib
 import sys
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 USE_VENDORED_LDAP = True
 
