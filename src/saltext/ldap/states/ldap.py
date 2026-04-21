@@ -365,9 +365,7 @@ def managed(name, entries, connect_spec=None, attrlist=None):
                 changes[xn] = None
                 continue
             changes[xn] = {
-                attr: sorted(vals)
-                for attr, vals in x.items()
-                if o.get(attr, ()) != n.get(attr, ())
+                attr: sorted(vals) for attr, vals in x.items() if o.get(attr, ()) != n.get(attr, ())
             }
 
     return ret
@@ -429,11 +427,7 @@ def _process_entries(l, attrlist, entries):
                 results = __salt__["ldap3.search"](l, dn, "base", attrlist=attrlist)
                 if len(results) == 1:
                     attrs = results[dn]
-                    olde = {
-                        attr: OrderedSet(attrs[attr])
-                        for attr in attrs
-                        if len(attrs[attr])
-                    }
+                    olde = {attr: OrderedSet(attrs[attr]) for attr in attrs if len(attrs[attr])}
                 else:
                     # nothing, so it must be a brand new entry
                     assert len(results) == 0
@@ -533,9 +527,7 @@ def _toset(thing):
     # so that equality checks work
     # (LDAP stores numbers as strings)
     try:
-        return OrderedSet(
-            to_bytes(str(x)) if isinstance(x, int) else to_bytes(x) for x in thing
-        )
+        return OrderedSet(to_bytes(str(x)) if isinstance(x, int) else to_bytes(x) for x in thing)
     except TypeError:
         return OrderedSet(
             str(thing),

@@ -124,8 +124,8 @@ Result
 import logging
 import os
 
+# pylint: disable-next=import-error
 import jinja2
-
 import salt.utils.data
 from salt.exceptions import SaltInvocationError
 
@@ -279,6 +279,7 @@ def _do_search(conf):
     try:
         _filter = conf["filter"]
     except KeyError:
+        # pylint: disable-next=raise-missing-from
         raise SaltInvocationError("missing filter")
     _dn = _config("dn", conf)
     scope = _config("scope", conf)
@@ -290,9 +291,7 @@ def _do_search(conf):
         attrs = None
     # Perform the search
     try:
-        result = __salt__["ldap.search"](_filter, _dn, scope, attrs, **connargs)[
-            "results"
-        ]
+        result = __salt__["ldap.search"](_filter, _dn, scope, attrs, **connargs)["results"]
     except IndexError:  # we got no results for this search
         log.debug("LDAP search returned no results for filter %s", _filter)
         result = {}
@@ -302,9 +301,7 @@ def _do_search(conf):
     return result
 
 
-def ext_pillar(
-    minion_id, pillar, config_file  # pylint: disable=W0613  # pylint: disable=W0613
-):
+def ext_pillar(minion_id, pillar, config_file):  # pylint: disable=W0613  # pylint: disable=W0613
     """
     Execute LDAP searches and return the aggregated data
     """
@@ -314,23 +311,19 @@ def ext_pillar(
     except jinja2.exceptions.TemplateNotFound:
         log.debug("pillar_ldap: missing configuration file %s", config_file)
     except Exception:  # pylint: disable=broad-except
-        log.debug(
-            "pillar_ldap: failed to render template for %s", config_file, exc_info=True
-        )
+        log.debug("pillar_ldap: failed to render template for %s", config_file, exc_info=True)
 
     if not config_template:
         # We don't have a config file
         return {}
-
+    # pylint: disable-next=import-outside-toplevel
     import salt.utils.yaml
 
     try:
         opts = salt.utils.yaml.safe_load(config_template) or {}
         opts["conf_file"] = config_file
     except Exception as err:  # pylint: disable=broad-except
-        log.warning(
-            "pillar_ldap: error parsing configuration file: %s - %s", config_file, err
-        )
+        log.warning("pillar_ldap: error parsing configuration file: %s - %s", config_file, err)
         return {}
     else:
         if not isinstance(opts, dict):
