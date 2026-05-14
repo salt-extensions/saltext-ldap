@@ -7,11 +7,13 @@ Provide authentication using simple LDAP binds
 import itertools
 import logging
 
-from jinja2 import Environment
-
 import salt.utils.data
 import salt.utils.stringutils
-from salt.exceptions import CommandExecutionError, SaltInvocationError
+
+# pylint: disable-next=import-error
+from jinja2 import Environment
+from salt.exceptions import CommandExecutionError
+from salt.exceptions import SaltInvocationError
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +65,7 @@ def _config(key, mandatory=True, opts=None):
         except KeyError:
             if mandatory:
                 msg = f"missing auth.ldap.{key} in master config"
+                # pylint: disable-next=raise-missing-from
                 raise SaltInvocationError(msg)
             return False
     return value
@@ -107,6 +110,9 @@ class _LDAPConnection:
         self.tls = tls
         self.binddn = binddn
         self.bindpw = bindpw
+        # unused
+        del accountattributename
+        del activedirectory
         if not HAS_LDAP:
             raise CommandExecutionError(
                 "LDAP connection could not be made, the python-ldap module is "
@@ -139,6 +145,7 @@ class _LDAPConnection:
                     self.ldap.start_tls_s()
                 self.ldap.simple_bind_s(self.binddn, self.bindpw)
         except Exception as ldap_error:  # pylint: disable=broad-except
+            # pylint: disable-next=raise-missing-from
             raise CommandExecutionError(
                 "Failed to bind to LDAP server {} as {}: {}".format(
                     self.uri, self.binddn, ldap_error
@@ -254,9 +261,7 @@ def _bind(username, password, anonymous=False, opts=None):
 
     if paramvalues["filter"]:
         escaped_username = ldap.filter.escape_filter_chars(username)
-        paramvalues["filter"] = _render_template(
-            paramvalues["filter"], escaped_username
-        )
+        paramvalues["filter"] = _render_template(paramvalues["filter"], escaped_username)
 
     # Only add binddn/bindpw to the connargs when they're set, as they're not
     # mandatory for initializing the LDAP object, but if they're provided
@@ -298,14 +303,10 @@ def _bind(username, password, anonymous=False, opts=None):
                 cns = [tup[0] for tup in result]
                 total_not_none = sum(1 for c in cns if c is not None)
                 if total_not_none > 1:
-                    log.error(
-                        "LDAP lookup found multiple results for user %s", username
-                    )
+                    log.error("LDAP lookup found multiple results for user %s", username)
                     return False
                 elif total_not_none == 0:
-                    log.error(
-                        "LDAP lookup--unable to find CN matching user %s", username
-                    )
+                    log.error("LDAP lookup--unable to find CN matching user %s", username)
                     return False
 
             connargs["binddn"] = result[0][0]
@@ -421,9 +422,7 @@ def groups(username, **kwargs):
                 return group_list
             # LDAP results are always tuples.  First entry in the tuple is the DN
             dn = ldap.filter.escape_filter_chars(user_dn_results[0][0])
-            ldap_search_string = "(&(member={})(objectClass={}))".format(
-                dn, _config("groupclass")
-            )
+            ldap_search_string = "(&(member={})(objectClass={}))".format(dn, _config("groupclass"))
             log.debug("Running LDAP group membership search: %s", ldap_search_string)
             try:
                 search_results = bind.search_s(
@@ -436,9 +435,7 @@ def groups(username, **kwargs):
                     ],
                 )
             except Exception as e:  # pylint: disable=broad-except
-                log.error(
-                    "Exception thrown while retrieving group membership in AD: %s", e
-                )
+                log.error("Exception thrown while retrieving group membership in AD: %s", e)
                 return group_list
             for _, entry in search_results:
                 if "cn" in entry:
@@ -467,9 +464,7 @@ def groups(username, **kwargs):
                 ):
                     if (
                         username
-                        == salt.utils.stringutils.to_unicode(user)
-                        .split(",")[0]
-                        .split("=")[-1]
+                        == salt.utils.stringutils.to_unicode(user).split(",")[0].split("=")[-1]
                     ):
                         group_list.append(entry.split(",")[0].split("=")[-1])
 
@@ -497,24 +492,13 @@ def groups(username, **kwargs):
                 ],
             )
             for _, entry in search_results:
-                if username in salt.utils.data.decode(
-                    entry[_config("accountattributename")]
-                ):
+                if username in salt.utils.data.decode(entry[_config("accountattributename")]):
                     group_list.append(salt.utils.stringutils.to_unicode(entry["cn"][0]))
             for user, entry in search_results:
-                if (
-                    username
-                    == salt.utils.stringutils.to_unicode(user)
-                    .split(",")[0]
-                    .split("=")[-1]
-                ):
-                    for group in salt.utils.data.decode(
-                        entry[_config("groupattribute")]
-                    ):
+                if username == salt.utils.stringutils.to_unicode(user).split(",")[0].split("=")[-1]:
+                    for group in salt.utils.data.decode(entry[_config("groupattribute")]):
                         group_list.append(
-                            salt.utils.stringutils.to_unicode(group)
-                            .split(",")[0]
-                            .split("=")[-1]
+                            salt.utils.stringutils.to_unicode(group).split(",")[0].split("=")[-1]
                         )
             log.debug("User %s is a member of groups: %s", username, group_list)
 
@@ -617,11 +601,7 @@ def process_acl(auth_list, opts=None):
         if isinstance(item, str):
             continue
         ou_names.extend(
-            [
-                potential_ou
-                for potential_ou in item.keys()
-                if potential_ou.startswith("ldap(")
-            ]
+            [potential_ou for potential_ou in item.keys() if potential_ou.startswith("ldap(")]
         )
     if ou_names:
         auth_list = __expand_ldap_entries(auth_list, opts)

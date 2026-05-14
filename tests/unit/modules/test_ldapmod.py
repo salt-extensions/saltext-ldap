@@ -1,15 +1,16 @@
 """
-    :codeauthor: Jayesh Kariya <jayeshk@saltstack.com>
+:codeauthor: Jayesh Kariya <jayeshk@saltstack.com>
 
-    Test cases for salt.modules.ldapmod
+Test cases for salt.modules.ldapmod
 """
 
 import time
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
-import salt.modules.ldapmod as ldapmod
-from tests.support.mock import MagicMock, patch
+from saltext.ldap.modules import ldapmod
 
 
 @pytest.fixture
