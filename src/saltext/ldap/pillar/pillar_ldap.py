@@ -14,8 +14,7 @@ file which provides the actual configuration for the LDAP searches.
 Configuring the LDAP ext_pillar
 ===============================
 
-The basic configuration is part of the `master configuration
-<_master-configuration-ext-pillar>`_.
+The basic configuration is part of the `master configuration`.
 
 .. code-block:: yaml
 
