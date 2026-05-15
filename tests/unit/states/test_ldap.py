@@ -13,10 +13,10 @@ import logging
 
 import attr
 import pytest
-
-import salt.states.ldap
 from salt.utils.oset import OrderedSet
 from salt.utils.stringutils import to_bytes
+
+import saltext.ldap.states.ldap
 
 log = logging.getLogger(__name__)
 
@@ -177,6 +177,7 @@ def no_change_complex_db(db):
     return db
 
 
+# pylint: disable-next=invalid-name
 class _dummy_ctx:
     def __init__(self):
         pass
@@ -198,7 +199,7 @@ def configure_loader_modules(db):
         "ldap3.change": db.dummy_change,
         "ldap3.modify": db.dummy_modify,
     }
-    return {salt.states.ldap: {"__opts__": {"test": False}, "__salt__": salt_dunder}}
+    return {saltext.ldap.states.ldap: {"__opts__": {"test": False}, "__salt__": salt_dunder}}
 
 
 def _test_helper(init_db, expected_ret, replace, delete_others=False, attrlist=None):
@@ -268,7 +269,7 @@ def _test_helper(init_db, expected_ret, replace, delete_others=False, attrlist=N
         {dn: [{"replace": attrs}, {"delete_others": delete_others}]}
         for dn, attrs in replace.items()
     ]
-    actual = salt.states.ldap.managed(name, entries, attrlist=attrlist)
+    actual = saltext.ldap.states.ldap.managed(name, entries, attrlist=attrlist)
     assert expected_ret == actual
     assert expected_db == init_db.db
 
@@ -353,10 +354,9 @@ def _test_helper_add(db, expected_ret, add_items, delete_others=False, attrlist=
         },
     )
     entries = [
-        {dn: [{"add": attrs}, {"delete_others": delete_others}]}
-        for dn, attrs in add_items.items()
+        {dn: [{"add": attrs}, {"delete_others": delete_others}]} for dn, attrs in add_items.items()
     ]
-    actual = salt.states.ldap.managed(name, entries, attrlist=attrlist)
+    actual = saltext.ldap.states.ldap.managed(name, entries, attrlist=attrlist)
     assert expected_ret == actual
     assert expected_db == db.db
 
@@ -373,7 +373,7 @@ def test_managed_empty(db):
         "result": True,
         "comment": "LDAP entries already set",
     }
-    actual = salt.states.ldap.managed(name, {})
+    actual = saltext.ldap.states.ldap.managed(name, {})
     assert expected == actual
 
 
@@ -384,9 +384,7 @@ def test_managed_add_entry(db):
 def test_managed_add_attr(complex_db):
     _test_helper_success_add(complex_db, {"dnfoo": {"attrfoo1": ["valfoo1.3"]}})
     _test_helper_success_add(complex_db, {"dnfoo": {"attrfoo4": ["valfoo4.1"]}})
-    _test_helper_success_add(
-        complex_db, {"dnfoo": {"attrfoo10": ["valfoo10"]}}, attrlist=["*"]
-    )
+    _test_helper_success_add(complex_db, {"dnfoo": {"attrfoo10": ["valfoo10"]}}, attrlist=["*"])
     _test_helper_success_add(
         complex_db, {"dnfoo11": {"attrfoo11": ["valfoo11"]}}, attrlist=["attrfoo11"]
     )
@@ -394,9 +392,7 @@ def test_managed_add_attr(complex_db):
 
 def test_managed_replace_attr(complex_db):
     _test_helper_success(complex_db, {"dnfoo": {"attrfoo3": ["valfoo3.1"]}})
-    _test_helper_success(
-        complex_db, {"dnfoo": {"attrfoo12": ["valfoo12"]}}, attrlist=["*"]
-    )
+    _test_helper_success(complex_db, {"dnfoo": {"attrfoo12": ["valfoo12"]}}, attrlist=["*"])
     _test_helper_success(
         complex_db, {"dnfoo13": {"attrfoo13": ["valfoo13"]}}, attrlist=["attrfoo13"]
     )
@@ -431,9 +427,7 @@ def test_managed_add_attr_delete_others(complex_db):
 
 
 def test_managed_no_net_change(no_change_complex_db):
-    _test_helper_nochange(
-        no_change_complex_db, {"dnfoo": {"attrfoo1": ["valfoo1.1", "valfoo1.2"]}}
-    )
+    _test_helper_nochange(no_change_complex_db, {"dnfoo": {"attrfoo1": ["valfoo1.1", "valfoo1.2"]}})
 
 
 def test_managed_repeated_values(db):
