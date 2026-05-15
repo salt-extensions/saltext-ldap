@@ -74,9 +74,7 @@ def _bind(l, bind=None):
         l.sasl_interactive_bind_s(bind.get("dn", ""), auth)
     else:
         raise ValueError(
-            'unsupported bind method "'
-            + method
-            + '"; supported bind methods: simple sasl'
+            'unsupported bind method "' + method + '"; supported bind methods: simple sasl'
         )
 
 
@@ -94,6 +92,7 @@ def _format_unicode_password(pwd):
     return f'"{pwd}"'.encode("utf-16-le")
 
 
+# pylint: disable-next=invalid-name
 class _connect_ctx:
     def __init__(self, c):
         self.c = c
@@ -266,8 +265,7 @@ def connect(connect_spec=None):
     backend_name = connect_spec.get("backend", "ldap")
     if backend_name not in available_backends:
         raise ValueError(
-            "unsupported backend or required Python module"
-            + f" unavailable: {backend_name}"
+            "unsupported backend or required Python module" + f" unavailable: {backend_name}"
         )
     url = connect_spec.get("url", "ldapi:///")
     try:
@@ -411,15 +409,11 @@ def add(connect_spec, dn, attributes):
     # convert the "iterable of values" to lists in case that's what
     # addModlist() expects (also to ensure that the caller's objects
     # are not modified)
-    attributes = {
-        attr: salt.utils.data.encode(list(vals)) for attr, vals in attributes.items()
-    }
+    attributes = {attr: salt.utils.data.encode(list(vals)) for attr, vals in attributes.items()}
     log.info("adding entry: dn: %s attributes: %s", repr(dn), repr(attributes))
 
     if "unicodePwd" in attributes:
-        attributes["unicodePwd"] = [
-            _format_unicode_password(x) for x in attributes["unicodePwd"]
-        ]
+        attributes["unicodePwd"] = [_format_unicode_password(x) for x in attributes["unicodePwd"]]
 
     modlist = ldap.modlist.addModlist(attributes)
     try:
@@ -514,8 +508,7 @@ def modify(connect_spec, dn, directives):
     # modify_s() expects (also to ensure that the caller's objects are
     # not modified)
     modlist = [
-        (getattr(ldap, "MOD_" + op.upper()), attr, list(vals))
-        for op, attr, vals in directives
+        (getattr(ldap, "MOD_" + op.upper()), attr, list(vals)) for op, attr, vals in directives
     ]
 
     for idx, mod in enumerate(modlist):

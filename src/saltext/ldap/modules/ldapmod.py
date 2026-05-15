@@ -79,6 +79,7 @@ def _config(name, key=None, **kwargs):
     """
     if key is None:
         key = name
+    # pylint: disable-next=consider-using-get
     if name in kwargs:
         value = kwargs[name]
     else:
@@ -126,12 +127,21 @@ def search(
 
     .. code-block:: python
 
-        {'myhost': {'count': 1,
-                    'results': [['cn=myhost,ou=hosts,o=acme,c=gb',
-                                 {'saltKeyValue': ['ntpserver=ntp.acme.local',
-                                                   'foo=myfoo'],
-                                  'saltState': ['foo', 'bar']}]],
-                    'time': {'human': '1.2ms', 'raw': '0.00123'}}}
+        {
+            "myhost": {
+                "count": 1,
+                "results": [
+                    [
+                        "cn=myhost,ou=hosts,o=acme,c=gb",
+                        {
+                            "saltKeyValue": ["ntpserver=ntp.acme.local", "foo=myfoo"],
+                            "saltState": ["foo", "bar"],
+                        },
+                    ]
+                ],
+                "time": {"human": "1.2ms", "raw": "0.00123"},
+            }
+        }
 
     Search and connection options can be overridden by specifying the relevant
     option as key=value pairs, for example:
@@ -206,6 +216,7 @@ class _LDAPConnection:
             if not anonymous:
                 self.ldap.simple_bind_s(self.binddn, self.bindpw)
         except Exception as ldap_error:  # pylint: disable=broad-except
+            # pylint: disable-next=raise-missing-from
             raise CommandExecutionError(
                 "Failed to bind to LDAP server {} as {}: {}".format(
                     self.uri, self.binddn, ldap_error

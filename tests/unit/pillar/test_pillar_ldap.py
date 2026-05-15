@@ -1,5 +1,6 @@
-import salt.pillar.pillar_ldap as pillar_ldap
 import salt.utils.stringutils
+
+from saltext.ldap.pillar import pillar_ldap
 
 
 def test__config_returns_str():
@@ -15,6 +16,4 @@ def test__conf_defaults_to_none():
 def test__conf_returns_str_from_unicode_default():
     conf = {"foo": "bar"}
     default = salt.utils.stringutils.to_unicode("bam")
-    assert pillar_ldap._config("bang", conf, default) == salt.utils.stringutils.to_str(
-        "bam"
-    )
+    assert pillar_ldap._config("bang", conf, default) == salt.utils.stringutils.to_str("bam")
