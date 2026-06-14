@@ -1,7 +1,7 @@
 """
 :codeauthor: Jayesh Kariya <jayeshk@saltstack.com>
 
-Test cases for salt.modules.ldapmod
+Test cases for saltext.ldap.modules.ldap_mod
 """
 
 import time
@@ -10,12 +10,12 @@ from unittest.mock import patch
 
 import pytest
 
-from saltext.ldap.modules import ldapmod
+from saltext.ldap.modules import ldap_mod
 
 
 @pytest.fixture
 def configure_loader_modules():
-    return {ldapmod: {}}
+    return {ldap_mod: {}}
 
 
 # 'search' function tests: 1
@@ -48,10 +48,10 @@ def test_search():
             return "SALT"
 
     mock = MagicMock(return_value=True)
-    with patch.dict(ldapmod.__salt__, {"config.option": mock}):
-        with patch.object(ldapmod, "_connect", MagicMock(return_value=MockConnect())):
+    with patch.dict(ldap_mod.__salt__, {"config.option": mock}):
+        with patch.object(ldap_mod, "_connect", MagicMock(return_value=MockConnect())):
             with patch.object(time, "time", MagicMock(return_value=8e-04)):
-                assert ldapmod.search(filter="myhost") == {
+                assert ldap_mod.search(filter="myhost") == {
                     "count": 4,
                     "results": "SALT",
                     "time": {"raw": "0.0", "human": "0.0ms"},

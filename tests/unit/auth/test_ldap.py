@@ -1,16 +1,16 @@
 """
-Unit tests for salt.auth.ldap
+Unit tests for saltext.ldap.auth.ldap_mod
 """
 
 from unittest.mock import patch
 
 import pytest
 
-import saltext.ldap.auth.ldap
+import saltext.ldap.auth.ldap_mod
 
 pytestmark = [
     pytest.mark.skipif(
-        not saltext.ldap.auth.ldap.HAS_LDAP, reason="Install python-ldap for this test"
+        not saltext.ldap.auth.ldap_mod.HAS_LDAP, reason="Install python-ldap for this test"
     ),
 ]
 
@@ -33,7 +33,7 @@ class Bind:
 @pytest.fixture
 def configure_loader_modules():
     return {
-        saltext.ldap.auth.ldap: {
+        saltext.ldap.auth.ldap_mod: {
             "__opts__": {
                 "auth.ldap.binddn": ("uid={{username}},cn=users,cn=compat,dc=saltstack,dc=com"),
                 "auth.ldap.port": 389,
@@ -53,54 +53,54 @@ def test_config():
     """
     Test that the _config function works correctly
     """
-    assert saltext.ldap.auth.ldap._config("basedn") == "dc=saltstack,dc=com"
+    assert saltext.ldap.auth.ldap_mod._config("basedn") == "dc=saltstack,dc=com"
     assert (
-        saltext.ldap.auth.ldap._config("group_filter")
+        saltext.ldap.auth.ldap_mod._config("group_filter")
         == "(&(memberUid={{ username }})(objectClass=posixgroup))"
     )
-    assert saltext.ldap.auth.ldap._config("accountattributename") == "memberUid"
-    assert saltext.ldap.auth.ldap._config("groupattribute") == "memberOf"
+    assert saltext.ldap.auth.ldap_mod._config("accountattributename") == "memberUid"
+    assert saltext.ldap.auth.ldap_mod._config("groupattribute") == "memberOf"
 
 
 def test_groups_freeipa():
     """
     test groups in freeipa
     """
-    with patch.dict(saltext.ldap.auth.ldap.__opts__, {"auth.ldap.freeipa": True}):
-        with patch("saltext.ldap.auth.ldap._bind", return_value=Bind):
-            assert "saltusers" in saltext.ldap.auth.ldap.groups("saltuser", password="password")
+    with patch.dict(saltext.ldap.auth.ldap_mod.__opts__, {"auth.ldap.freeipa": True}):
+        with patch("saltext.ldap.auth.ldap_mod._bind", return_value=Bind):
+            assert "saltusers" in saltext.ldap.auth.ldap_mod.groups("saltuser", password="password")
 
 
 def test_groups():
     """
     test groups in ldap
     """
-    with patch("saltext.ldap.auth.ldap._bind", return_value=Bind):
-        assert "saltusers" in saltext.ldap.auth.ldap.groups("saltuser", password="password")
+    with patch("saltext.ldap.auth.ldap_mod._bind", return_value=Bind):
+        assert "saltusers" in saltext.ldap.auth.ldap_mod.groups("saltuser", password="password")
 
 
 def test_groups_activedirectory():
     """
     test groups in activedirectory
     """
-    with patch.dict(saltext.ldap.auth.ldap.__opts__, {"auth.ldap.activedirectory": True}):
-        with patch("saltext.ldap.auth.ldap._bind", return_value=Bind):
-            assert "saltusers" in saltext.ldap.auth.ldap.groups("saltuser", password="password")
+    with patch.dict(saltext.ldap.auth.ldap_mod.__opts__, {"auth.ldap.activedirectory": True}):
+        with patch("saltext.ldap.auth.ldap_mod._bind", return_value=Bind):
+            assert "saltusers" in saltext.ldap.auth.ldap_mod.groups("saltuser", password="password")
 
 
 def test_auth_nopass():
-    with patch.dict(saltext.ldap.auth.ldap.__opts__, {"auth.ldap.bindpw": "p@ssw0rd!"}):
-        with patch("saltext.ldap.auth.ldap._bind_for_search", return_value=Bind):
-            assert not saltext.ldap.auth.ldap.auth("foo", None)
+    with patch.dict(saltext.ldap.auth.ldap_mod.__opts__, {"auth.ldap.bindpw": "p@ssw0rd!"}):
+        with patch("saltext.ldap.auth.ldap_mod._bind_for_search", return_value=Bind):
+            assert not saltext.ldap.auth.ldap_mod.auth("foo", None)
 
 
 def test_auth_nouser():
-    with patch.dict(saltext.ldap.auth.ldap.__opts__, {"auth.ldap.bindpw": "p@ssw0rd!"}):
-        with patch("saltext.ldap.auth.ldap._bind_for_search", return_value=Bind):
-            assert not saltext.ldap.auth.ldap.auth(None, "foo")
+    with patch.dict(saltext.ldap.auth.ldap_mod.__opts__, {"auth.ldap.bindpw": "p@ssw0rd!"}):
+        with patch("saltext.ldap.auth.ldap_mod._bind_for_search", return_value=Bind):
+            assert not saltext.ldap.auth.ldap_mod.auth(None, "foo")
 
 
 def test_auth_nouserandpass():
-    with patch.dict(saltext.ldap.auth.ldap.__opts__, {"auth.ldap.bindpw": "p@ssw0rd!"}):
-        with patch("saltext.ldap.auth.ldap._bind_for_search", return_value=Bind):
-            assert not saltext.ldap.auth.ldap.auth(None, None)
+    with patch.dict(saltext.ldap.auth.ldap_mod.__opts__, {"auth.ldap.bindpw": "p@ssw0rd!"}):
+        with patch("saltext.ldap.auth.ldap_mod._bind_for_search", return_value=Bind):
+            assert not saltext.ldap.auth.ldap_mod.auth(None, None)
