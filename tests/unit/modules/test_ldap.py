@@ -126,11 +126,20 @@ def test_search_empty_attrs_string_overrides_to_all_attributes():
 def test_search_formats_slow_queries_in_seconds():
     """Searches taking >= 200ms are reported in seconds, not milliseconds."""
     conn = _RecordingConn(return_value=[])
-    times = iter([100.0, 100.5])  # start, end → 0.5s elapsed
+    # search() calls time.time() twice; patching time.time globally also
+    # intercepts logging/salt-factories calls, so return a steadily
+    # advancing clock instead of a fixed-length iterator.
+    clock = {"now": 100.0}
+
+    def fake_time():
+        current = clock["now"]
+        clock["now"] += 0.5
+        return current
+
     config_option = MagicMock(return_value="dc=x")
     with patch.dict(ldap_mod.__salt__, {"config.option": config_option}):
         with patch.object(ldap_mod, "_connect", MagicMock(return_value=conn)):
-            with patch.object(time, "time", lambda: next(times)):
+            with patch.object(time, "time", fake_time):
                 result = ldap_mod.search(filter="(cn=*)", dn="dc=x", scope=2, attrs=["cn"])
     assert result["time"]["human"].endswith("s")
     assert not result["time"]["human"].endswith("ms")
