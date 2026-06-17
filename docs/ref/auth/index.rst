@@ -9,4 +9,4 @@ ____________
 .. autosummary::
     :toctree:
 
-    ldap
+    ldap_mod

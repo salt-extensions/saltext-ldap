@@ -68,7 +68,7 @@ def __virtual__():
         return __virtualname__
     return (
         False,
-        "The ldapmod execution module cannot be loaded: ldap config not present.",
+        "The ldap execution module cannot be loaded: ldap config not present.",
     )
 
 

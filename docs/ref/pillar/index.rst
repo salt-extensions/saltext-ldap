@@ -9,4 +9,4 @@ ______________
 .. autosummary::
     :toctree:
 
-    pillar_ldap
+    ldap_mod

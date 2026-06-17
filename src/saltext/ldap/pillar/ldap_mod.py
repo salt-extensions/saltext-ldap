@@ -139,13 +139,15 @@ except ImportError:
 # Set up logging
 log = logging.getLogger(__name__)
 
+__virtualname__ = "pillar_ldap"
+
 
 def __virtual__():
     """
     Only return if ldap module is installed
     """
     if HAS_LDAP:
-        return "pillar_ldap"
+        return __virtualname__
     else:
         return False
 

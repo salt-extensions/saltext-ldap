@@ -16,7 +16,7 @@ import pytest
 from salt.utils.oset import OrderedSet
 from salt.utils.stringutils import to_bytes
 
-import saltext.ldap.states.ldap
+import saltext.ldap.states.ldap_mod
 
 log = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ def configure_loader_modules(db):
         "ldap3.change": db.dummy_change,
         "ldap3.modify": db.dummy_modify,
     }
-    return {saltext.ldap.states.ldap: {"__opts__": {"test": False}, "__salt__": salt_dunder}}
+    return {saltext.ldap.states.ldap_mod: {"__opts__": {"test": False}, "__salt__": salt_dunder}}
 
 
 def _test_helper(init_db, expected_ret, replace, delete_others=False, attrlist=None):
@@ -269,7 +269,7 @@ def _test_helper(init_db, expected_ret, replace, delete_others=False, attrlist=N
         {dn: [{"replace": attrs}, {"delete_others": delete_others}]}
         for dn, attrs in replace.items()
     ]
-    actual = saltext.ldap.states.ldap.managed(name, entries, attrlist=attrlist)
+    actual = saltext.ldap.states.ldap_mod.managed(name, entries, attrlist=attrlist)
     assert expected_ret == actual
     assert expected_db == init_db.db
 
@@ -356,7 +356,7 @@ def _test_helper_add(db, expected_ret, add_items, delete_others=False, attrlist=
     entries = [
         {dn: [{"add": attrs}, {"delete_others": delete_others}]} for dn, attrs in add_items.items()
     ]
-    actual = saltext.ldap.states.ldap.managed(name, entries, attrlist=attrlist)
+    actual = saltext.ldap.states.ldap_mod.managed(name, entries, attrlist=attrlist)
     assert expected_ret == actual
     assert expected_db == db.db
 
@@ -373,7 +373,7 @@ def test_managed_empty(db):
         "result": True,
         "comment": "LDAP entries already set",
     }
-    actual = saltext.ldap.states.ldap.managed(name, {})
+    actual = saltext.ldap.states.ldap_mod.managed(name, {})
     assert expected == actual
 
 

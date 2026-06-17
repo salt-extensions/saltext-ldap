@@ -18,6 +18,12 @@ from salt.utils.stringutils import to_bytes
 
 log = logging.getLogger(__name__)
 
+__virtualname__ = "ldap"
+
+
+def __virtual__():
+    return __virtualname__
+
 
 def managed(name, entries, connect_spec=None, attrlist=None):
     """Ensure the existence (or not) of LDAP entries and their attributes
@@ -177,14 +183,14 @@ def managed(name, entries, connect_spec=None, attrlist=None):
 
     :param connect_spec:
         See the description of the ``connect_spec`` parameter of the
-        :py:func:`ldap3.connect <salt.modules.ldap3.connect>` function
-        in the :py:mod:`ldap3 <salt.modules.ldap3>` execution module.
+        :py:func:`ldap3.connect <saltext.ldap.modules.ldap3.connect>` function
+        in the :py:mod:`ldap3 <saltext.ldap.modules.ldap3>` execution module.
         If this is a dict and the ``'url'`` entry is not specified,
         the ``'url'`` entry is set to the value of the ``name``
         parameter.
 
     :param attrlist:
-        Passed directly to :py:func:`ldap3.connect <salt.modules.ldap3.search>`
+        Passed directly to :py:func:`ldap3.connect <saltext.ldap.modules.ldap3.search>`
         to filter the attributes returned by the LDAP server. By default, all
         user attributes will be requested, and this should only need to be
         modified if management of operational attributes is desired.

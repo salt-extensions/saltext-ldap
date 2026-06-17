@@ -28,6 +28,15 @@ try:
 except ImportError:
     HAS_LDAP = False
 
+__virtualname__ = "ldap"
+
+
+def __virtual__():
+    if HAS_LDAP:
+        return __virtualname__
+    return False, "Missing dependency: python-ldap"
+
+
 # Defaults, override in master config
 __defopts__ = {
     "auth.ldap.basedn": "",

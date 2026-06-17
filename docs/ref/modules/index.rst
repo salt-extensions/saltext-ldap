@@ -10,4 +10,4 @@ _________________
     :toctree:
 
     ldap3
-    ldapmod
+    ldap_mod
