@@ -21,6 +21,19 @@ import saltext.ldap.states.ldap_mod
 log = logging.getLogger(__name__)
 
 
+class LDAPError(Exception):
+    """Stand-in for ldap3.LDAPError used by tests that simulate LDAP
+    operation failures.
+
+    ``managed()`` resolves the exception class via
+    ``inspect.getmodule(connect).LDAPError`` where ``connect`` is the
+    callable registered as ``__salt__["ldap3.connect"]``. Because the
+    dummy ``connect`` is a method of ``LdapDB`` defined in this module,
+    ``inspect.getmodule()`` returns this test module, so the symbol must
+    live here for the ``except`` clause to resolve.
+    """
+
+
 # emulates the LDAP database.  each key is the DN of an entry and it
 # maps to a dict which maps attribute names to sets of values.
 @attr.s
@@ -56,19 +69,32 @@ class LdapDB:
         del self.db[dn]
         return True
 
-    def dummy_change(self, connect_spec, dn, before, after):
+    def dummy_change(self, connect_spec, dn, before, after, replace_attrs=None):
         assert before != after
         assert before
         assert after
         assert dn in self.db
         e = self.db[dn]
-        assert e == before
+        replace_attrs = set(replace_attrs or ())
+        # The state may pass a normalized view of ``before`` for attrs being
+        # wholesale-replaced (e.g. X-ORDERED ``{N}`` prefix stripped), which
+        # is fine because the backend ignores ``before`` for those attrs and
+        # emits an atomic MOD_REPLACE. Only enforce the sanity invariant for
+        # attrs that go through the add/delete diff path.
+        e_diff = {a: v for a, v in e.items() if a not in replace_attrs}
+        before_diff = {a: v for a, v in before.items() if a not in replace_attrs}
+        assert e_diff == before_diff
         all_attrs = OrderedSet()
         all_attrs.update(before)
         all_attrs.update(after)
         directives = []
         for attr in all_attrs:
-            if attr not in before:
+            if attr in replace_attrs:
+                # Caller asked for a wholesale replace; mirror the real ldap3
+                # backend, which emits MOD_REPLACE rather than an add/delete
+                # diff for these attributes.
+                directives.append(("replace", attr, after.get(attr, ())))
+            elif attr not in before:
                 assert attr in after
                 assert after[attr]
                 directives.append(("add", attr, after[attr]))
@@ -111,7 +137,9 @@ class LdapDB:
                     del e[attr]
             elif op == "replace":
                 e.pop(attr, None)
-                e[attr] = OrderedSet(vals)
+                # MOD_REPLACE with an empty value list deletes the attribute.
+                if vals:
+                    e[attr] = OrderedSet(vals)
             else:
                 raise ValueError()
         return True
@@ -432,3 +460,317 @@ def test_managed_no_net_change(no_change_complex_db):
 
 def test_managed_repeated_values(db):
     _test_helper_success(db, {"dummydn": {"dummyattr": ["dummyval", "dummyval"]}})
+
+
+# ---------------------------------------------------------------------------
+# Tests for the wholesale-MOD_REPLACE + X-ORDERED idempotency fix.
+
+
+@attr.s
+class RecordingLdapDB(LdapDB):
+    """LdapDB subclass that records the directives passed to dummy_change.
+
+    Used to assert that ``replace:`` directives in the state actually reach the
+    ldap3 backend as MOD_REPLACE ops instead of an add/delete diff -- which is
+    what produces the ``TYPE_OR_VALUE_EXISTS`` failure against OpenLDAP
+    cn=config (X-ORDERED) attributes.
+    """
+
+    change_calls = attr.ib(init=False, default=attr.Factory(list))
+
+    def dummy_change(self, connect_spec, dn, before, after, replace_attrs=None):
+        self.change_calls.append(
+            {
+                "dn": dn,
+                "before": copy.deepcopy(before),
+                "after": copy.deepcopy(after),
+                "replace_attrs": set(replace_attrs or ()),
+            }
+        )
+        return super().dummy_change(connect_spec, dn, before, after, replace_attrs=replace_attrs)
+
+
+class TestReplaceAttrsAndXordered:
+    """Override the module-level ``db`` fixture with a recording-capable one
+    pre-populated with an X-ORDERED stored value, so the module-level
+    ``configure_loader_modules`` fixture wires that into ``__salt__`` for us.
+    """
+
+    @pytest.fixture
+    def db(self):
+        rdb = RecordingLdapDB()
+        rdb.db = {
+            "olcDatabase={1}mdb,cn=config": {
+                "olcSyncRepl": OrderedSet((b'{0}rid=001 provider="ldap://a"',)),
+            },
+        }
+        return rdb
+
+    def test_replace_directive_routes_through_replace_attrs(self, db):
+        """A user ``replace:`` directive must reach ldap3.change in
+        ``replace_attrs``, so the backend emits an atomic MOD_REPLACE rather
+        than the MOD_ADD/MOD_DELETE diff that fails with TYPE_OR_VALUE_EXISTS
+        against X-ORDERED attributes.
+        """
+        entries = [
+            {
+                "olcDatabase={1}mdb,cn=config": [
+                    {
+                        "replace": {
+                            "olcSyncRepl": [
+                                'rid=001 provider="ldap://a"',
+                                'rid=002 provider="ldap://b"',
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+        ret = saltext.ldap.states.ldap_mod.managed("ldapi:///", entries)
+        assert ret["result"] is True
+        assert len(db.change_calls) == 1
+        assert db.change_calls[0]["replace_attrs"] == {"olcSyncRepl"}
+
+    def test_xordered_prefix_is_normalized_for_comparison(self, db):
+        """When the server returned ``{N}``-prefixed values and the user
+        supplied bare values, the state should consider the entry already in
+        the desired state and emit no modify -- i.e. idempotent.
+        """
+        entries = [
+            {
+                "olcDatabase={1}mdb,cn=config": [
+                    {"replace": {"olcSyncRepl": ['rid=001 provider="ldap://a"']}}
+                ]
+            }
+        ]
+        ret = saltext.ldap.states.ldap_mod.managed("ldapi:///", entries)
+        assert ret["result"] is True
+        assert not ret["changes"]
+        assert not db.change_calls
+
+    def test_xordered_normalization_is_opportunistic(self, db):
+        """If the user supplies ``{N}``-prefixed values too, the stored copy
+        is left alone, and any genuine difference still triggers a modify.
+        """
+        entries = [
+            {
+                "olcDatabase={1}mdb,cn=config": [
+                    {"replace": {"olcSyncRepl": ['{0}rid=001 provider="ldap://different"']}}
+                ]
+            }
+        ]
+        ret = saltext.ldap.states.ldap_mod.managed("ldapi:///", entries)
+        assert ret["result"] is True
+        assert len(db.change_calls) == 1
+        assert db.change_calls[0]["replace_attrs"] == {"olcSyncRepl"}
+
+
+# ---------------------------------------------------------------------------
+# Direct tests for module-level helpers. The X-ORDERED idempotency tests
+# above exercise the bytes branch (slapd returns bytes); these cover the
+# str branch and the directive-dispatch branches that the higher-level
+# ``managed`` tests don't reach.
+
+
+class TestXorderedPrefixHelpersStr:
+    """Cover the str-input branches of ``_has_xordered_prefix`` and
+    ``_strip_xordered_prefix``.
+    """
+
+    def test_has_xordered_prefix_str_true(self):
+        assert saltext.ldap.states.ldap_mod._has_xordered_prefix("{0}foo") is True
+
+    def test_has_xordered_prefix_str_false(self):
+        assert saltext.ldap.states.ldap_mod._has_xordered_prefix("foo") is False
+
+    def test_strip_xordered_prefix_str_present(self):
+        assert saltext.ldap.states.ldap_mod._strip_xordered_prefix("{0}foo") == "foo"
+
+    def test_strip_xordered_prefix_str_absent(self):
+        assert saltext.ldap.states.ldap_mod._strip_xordered_prefix("foo") == "foo"
+
+
+class TestUpdateEntryDirectives:
+    """Direct tests for ``_update_entry`` covering directive branches not
+    exercised by the higher-level ``managed`` tests.
+    """
+
+    @staticmethod
+    def _status():
+        return {
+            "delete_others": False,
+            "mentioned_attributes": set(),
+            "replaced_attributes": set(),
+        }
+
+    def test_default_directive_applies_when_attr_absent(self):
+        entry = {}
+        status = self._status()
+        saltext.ldap.states.ldap_mod._update_entry(entry, status, {"default": {"foo": ["bar"]}})
+        assert entry == {"foo": OrderedSet([to_bytes("bar")])}
+        assert "foo" in status["mentioned_attributes"]
+
+    def test_default_directive_skipped_when_attr_present(self):
+        entry = {"foo": OrderedSet([to_bytes("existing")])}
+        status = self._status()
+        saltext.ldap.states.ldap_mod._update_entry(entry, status, {"default": {"foo": ["bar"]}})
+        assert entry == {"foo": OrderedSet([to_bytes("existing")])}
+
+    def test_unknown_directive_raises(self):
+        entry = {}
+        status = self._status()
+        with pytest.raises(ValueError, match="unknown directive: bogus"):
+            saltext.ldap.states.ldap_mod._update_entry(entry, status, {"bogus": {"foo": ["bar"]}})
+
+    def test_add_directive_with_empty_vals_and_no_existing_is_noop(self):
+        entry = {}
+        status = self._status()
+        saltext.ldap.states.ldap_mod._update_entry(entry, status, {"add": {"foo": []}})
+        assert not entry
+
+    def test_delete_directive_removes_specific_values(self):
+        entry = {"foo": OrderedSet([to_bytes("a"), to_bytes("b")])}
+        status = self._status()
+        saltext.ldap.states.ldap_mod._update_entry(entry, status, {"delete": {"foo": ["a"]}})
+        assert entry == {"foo": OrderedSet([to_bytes("b")])}
+
+    def test_delete_directive_with_empty_vals_removes_attr_entirely(self):
+        entry = {"foo": OrderedSet([to_bytes("a")])}
+        status = self._status()
+        saltext.ldap.states.ldap_mod._update_entry(entry, status, {"delete": {"foo": []}})
+        assert not entry
+
+    def test_delete_directive_removing_all_values_drops_attr(self):
+        entry = {"foo": OrderedSet([to_bytes("a"), to_bytes("b")])}
+        status = self._status()
+        saltext.ldap.states.ldap_mod._update_entry(entry, status, {"delete": {"foo": ["a", "b"]}})
+        assert not entry
+
+
+class TestToset:
+    """Direct tests for the ``_toset`` helper covering every type branch.
+
+    The higher-level tests reach ``_toset`` only via list inputs of bytes
+    values, so the None / str / int / TypeError-fallback branches need
+    their own coverage.
+    """
+
+    def test_none(self):
+        assert saltext.ldap.states.ldap_mod._toset(None) == OrderedSet()
+
+    def test_str(self):
+        assert saltext.ldap.states.ldap_mod._toset("foo") == OrderedSet([to_bytes("foo")])
+
+    def test_int(self):
+        assert saltext.ldap.states.ldap_mod._toset(42) == OrderedSet([to_bytes("42")])
+
+    def test_float_falls_through_to_typeerror_branch(self):
+        # Floats are neither None, str, nor int, and ``for x in 3.14``
+        # raises TypeError, so the function falls through to the
+        # str(thing) fallback. We only assert that the call doesn't
+        # raise and produces an OrderedSet; the exact membership of the
+        # fallback set is an implementation detail of the helper.
+        result = saltext.ldap.states.ldap_mod._toset(3.14)
+        assert isinstance(result, OrderedSet)
+
+    def test_iterable_of_mixed_types(self):
+        # ints inside an iterable get str()'d then bytes-encoded; bytes
+        # pass through to_bytes() unchanged.
+        result = saltext.ldap.states.ldap_mod._toset(["a", 1, b"b"])
+        assert result == OrderedSet([to_bytes("a"), to_bytes("1"), to_bytes("b")])
+
+
+class TestManagedTestMode:
+    """Cover the ``__opts__['test'] is True`` dry-run branch in ``managed``.
+
+    Overrides ``configure_loader_modules`` to set ``test: True`` so
+    ``managed()`` reports the would-be changes without invoking the
+    mutation backends.
+    """
+
+    @pytest.fixture
+    def configure_loader_modules(self, db):
+        salt_dunder = {
+            "ldap3.connect": db.dummy_connect,
+            "ldap3.search": db.dummy_search,
+            "ldap3.add": db.dummy_add,
+            "ldap3.delete": db.dummy_delete,
+            "ldap3.change": db.dummy_change,
+            "ldap3.modify": db.dummy_modify,
+        }
+        return {
+            saltext.ldap.states.ldap_mod: {
+                "__opts__": {"test": True},
+                "__salt__": salt_dunder,
+            }
+        }
+
+    def test_test_mode_does_not_apply_changes(self, complex_db):
+        before = copy.deepcopy(complex_db.db)
+        entries = [{"dnfoo": [{"replace": {"attrfoo1": ["newval"]}}]}]
+        ret = saltext.ldap.states.ldap_mod.managed("ldapi:///", entries)
+        assert ret["result"] is None
+        assert ret["comment"] == "Would change LDAP entries"
+        assert "dnfoo" in ret["changes"]
+        # database must be untouched in test mode
+        assert complex_db.db == before
+
+
+class TestConnectSpecConnectionObject:
+    """Cover the AttributeError branch in ``managed`` that handles a
+    non-dict ``connect_spec`` (i.e. an already-built connection-like
+    object).
+    """
+
+    def test_non_dict_connect_spec_skips_url_injection(self, db):
+        # A list has no ``setdefault``; the AttributeError is caught and
+        # treated as "already a connection object". The dummy_connect
+        # ignores its argument, so managed() should complete normally.
+        entries = [{"dn1": [{"add": {"foo": ["bar"]}}]}]
+        ret = saltext.ldap.states.ldap_mod.managed("ldapi:///", entries, connect_spec=[])
+        assert ret["result"] is True
+
+
+@attr.s
+class RaisingLdapDB(LdapDB):
+    """LdapDB whose mutation methods raise ``LDAPError`` on demand so
+    tests can exercise ``managed()``'s error-handling path.
+    """
+
+    raise_on_change = attr.ib(default=False)
+    raise_on_add = attr.ib(default=False)
+    raise_on_delete = attr.ib(default=False)
+
+    def dummy_change(self, connect_spec, dn, before, after, replace_attrs=None):
+        if self.raise_on_change:
+            raise LDAPError("simulated change failure")
+        return super().dummy_change(connect_spec, dn, before, after, replace_attrs=replace_attrs)
+
+    def dummy_add(self, connect_spec, dn, attributes):
+        if self.raise_on_add:
+            raise LDAPError("simulated add failure")
+        return super().dummy_add(connect_spec, dn, attributes)
+
+    def dummy_delete(self, connect_spec, dn):
+        if self.raise_on_delete:
+            raise LDAPError("simulated delete failure")
+        return super().dummy_delete(connect_spec, dn)
+
+
+class TestLDAPErrorHandling:
+    """Cover the ``except ldap3.LDAPError`` and error-reporting paths in
+    ``managed()``.
+    """
+
+    @pytest.fixture
+    def db(self):
+        rdb = RaisingLdapDB(raise_on_change=True)
+        rdb.db = {"dn1": {"foo": OrderedSet([b"existing"])}}
+        return rdb
+
+    def test_ldap_error_on_modify_is_reported(self, db):
+        entries = [{"dn1": [{"replace": {"foo": ["new"]}}]}]
+        ret = saltext.ldap.states.ldap_mod.managed("ldapi:///", entries)
+        assert ret["result"] is False
+        assert "failed to modify entry dn1" in ret["comment"]
+        assert "simulated change failure" in ret["comment"]

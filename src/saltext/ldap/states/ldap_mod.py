@@ -11,6 +11,7 @@ their attributes.
 import copy
 import inspect
 import logging
+import re
 from collections import OrderedDict
 
 from salt.utils.oset import OrderedSet
@@ -23,6 +24,27 @@ __virtualname__ = "ldap"
 
 def __virtual__():
     return __virtualname__
+
+
+# Matches the leading "{N}" ordering prefix that OpenLDAP prepends to values of
+# X-ORDERED multi-valued attributes (notably under cn=config, e.g. olcSyncRepl,
+# olcServerID, olcAccess). Matches both str and bytes forms.
+_XORDERED_PREFIX_BYTES = re.compile(rb"^\{\d+\}")
+_XORDERED_PREFIX_STR = re.compile(r"^\{\d+\}")
+
+
+def _has_xordered_prefix(val):
+    """True if ``val`` starts with an OpenLDAP X-ORDERED ``{N}`` prefix."""
+    if isinstance(val, bytes):
+        return _XORDERED_PREFIX_BYTES.match(val) is not None
+    return _XORDERED_PREFIX_STR.match(val) is not None
+
+
+def _strip_xordered_prefix(val):
+    """Return ``val`` with any leading ``{N}`` X-ORDERED prefix removed."""
+    if isinstance(val, bytes):
+        return _XORDERED_PREFIX_BYTES.sub(b"", val, count=1)
+    return _XORDERED_PREFIX_STR.sub("", val, count=1)
 
 
 def managed(name, entries, connect_spec=None, attrlist=None):
@@ -266,7 +288,7 @@ def managed(name, entries, connect_spec=None, attrlist=None):
 
     with connect(connect_spec) as l:
 
-        old, new = _process_entries(l, attrlist, entries)
+        old, new, replaced = _process_entries(l, attrlist, entries)
 
         # collect all of the affected entries (only the key is
         # important in this dict; would have used an OrderedSet if
@@ -333,7 +355,9 @@ def managed(name, entries, connect_spec=None, attrlist=None):
                         if n:
                             op = "modify"
                             assert o != n
-                            __salt__["ldap3.change"](l, dn, o, n)
+                            __salt__["ldap3.change"](
+                                l, dn, o, n, replace_attrs=replaced.get(dn, set())
+                            )
                         else:
                             op = "delete"
                             __salt__["ldap3.delete"](l, dn)
@@ -422,6 +446,7 @@ def _process_entries(l, attrlist, entries):
 
     old = OrderedDict()
     new = OrderedDict()
+    replaced = OrderedDict()
 
     for entries_dict in entries:
         for dn, directives_seq in entries_dict.items():
@@ -449,6 +474,7 @@ def _process_entries(l, attrlist, entries):
             entry_status = {
                 "delete_others": False,
                 "mentioned_attributes": set(),
+                "replaced_attributes": set(),
             }
             for directives in directives_seq:
                 _update_entry(newe, entry_status, directives)
@@ -459,7 +485,28 @@ def _process_entries(l, attrlist, entries):
                         to_delete.add(attr)
                 for attr in to_delete:
                     del newe[attr]
-    return old, new
+            replaced[dn] = entry_status["replaced_attributes"]
+
+            # Opportunistic X-ORDERED prefix normalization for the comparison
+            # in managed(): if the server returned values that all start with
+            # an OpenLDAP "{N}" ordering prefix (e.g. cn=config attributes
+            # like olcSyncRepl) and the user-supplied desired values lack the
+            # prefix, strip it from the stored copy so the diff sees them as
+            # equal. The stored representation on the server is unchanged --
+            # this only affects how salt decides whether a modify is needed.
+            # Restricted to attributes the user explicitly ``replace:``d so
+            # that ``add:``/``delete:`` paths (which feed an add/delete diff
+            # to the server, where the {N} index matters) are unaffected.
+            for attr in entry_status["replaced_attributes"]:
+                old_vals = olde.get(attr)
+                desired_vals = newe.get(attr)
+                if not old_vals or not desired_vals:
+                    continue
+                if all(_has_xordered_prefix(v) for v in old_vals) and any(
+                    not _has_xordered_prefix(v) for v in desired_vals
+                ):
+                    olde[attr] = OrderedSet(_strip_xordered_prefix(v) for v in old_vals)
+    return old, new, replaced
 
 
 def _update_entry(entry, status, directives):
@@ -473,11 +520,20 @@ def _update_entry(entry, status, directives):
     :param directives:
         A dict mapping directive types to directive-specific state
     """
+    # LDAP attribute names are case-insensitive at the server but Python dicts
+    # are case-sensitive, so reuse the existing key in ``entry`` when the user
+    # supplies a different case (e.g. ``olcSyncRepl`` from a state vs
+    # ``olcSyncrepl`` as returned by slapd). Otherwise the directive ends up
+    # creating a duplicate key and the idempotency comparison thinks the
+    # attribute is being added every run.
+    keymap = {k.lower(): k for k in entry}
     for directive, state in directives.items():
         if directive == "delete_others":
             status["delete_others"] = state
             continue
         for attr, vals in state.items():
+            attr = keymap.get(attr.lower(), attr)
+            keymap[attr.lower()] = attr
             status["mentioned_attributes"].add(attr)
             vals = _toset(vals)
             if directive == "default":
@@ -497,6 +553,7 @@ def _update_entry(entry, status, directives):
                 entry.pop(attr, None)
                 if vals:
                     entry[attr] = vals
+                status["replaced_attributes"].add(attr)
             else:
                 raise ValueError("unknown directive: " + directive)
 
