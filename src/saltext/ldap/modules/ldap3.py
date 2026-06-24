@@ -527,7 +527,7 @@ def modify(connect_spec, dn, directives):
     return True
 
 
-def change(connect_spec, dn, before, after):
+def change(connect_spec, dn, before, after, replace_attrs=None):
     """Modify an entry in an LDAP database.
 
     This does the same thing as :py:func:`modify`, but with a simpler
@@ -558,6 +558,19 @@ def change(connect_spec, dn, before, after):
         The desired state of the entry after modification.  This is a
         dict mapping each attribute name to an iterable of values.
 
+    :param replace_attrs:
+        Optional iterable of attribute names that the caller has explicitly
+        asked to be replaced wholesale (as opposed to add/delete diffed). For
+        each such attribute an atomic ``MOD_REPLACE`` is emitted with the
+        values from ``after``, instead of the ``MOD_ADD``/``MOD_DELETE`` pair
+        the generic diff would produce. This is needed for attributes whose
+        stored representation differs from the user-supplied form (for
+        example OpenLDAP ``cn=config`` X-ORDERED multi-valued attributes
+        like ``olcSyncRepl``, which the server returns with a ``{N}`` index
+        prefix); a generic diff in that case would emit a ``MOD_ADD`` of a
+        value the server considers already present, failing with
+        ``TYPE_OR_VALUE_EXISTS``.
+
     :returns:
         ``True`` if successful, raises an exception otherwise.
 
@@ -584,7 +597,20 @@ def change(connect_spec, dn, before, after):
     if "unicodePwd" in after:
         after["unicodePwd"] = [_format_unicode_password(x) for x in after["unicodePwd"]]
 
-    modlist = ldap.modlist.modifyModlist(before, after)
+    replace_attrs = set(replace_attrs or ())
+    modlist = []
+    for attr in replace_attrs:
+        # MOD_REPLACE with an empty value list deletes the attribute, which
+        # matches the desired semantics when the caller's `after` does not
+        # include the attribute.
+        modlist.append((ldap.MOD_REPLACE, attr, after.get(attr, [])))
+    if replace_attrs:
+        before_rest = {a: v for a, v in before.items() if a not in replace_attrs}
+        after_rest = {a: v for a, v in after.items() if a not in replace_attrs}
+    else:
+        before_rest = before
+        after_rest = after
+    modlist.extend(ldap.modlist.modifyModlist(before_rest, after_rest))
 
     try:
         l.c.modify_s(dn, modlist)
