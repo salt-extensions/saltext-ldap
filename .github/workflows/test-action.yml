@@ -36,6 +36,11 @@ jobs:
           NOX_VERSION: '2026.2.9'
           UV_VERSION: '0.10.11'
 
+      - name: Install System Deps
+        run: |
+          apt-get update
+          apt-get install -y libssl-dev libsasl2-dev libldap2-dev
+
       - name: Install Test Requirements
         env:
           SALT_REQUIREMENT: salt==${{ matrix.salt-version }}
