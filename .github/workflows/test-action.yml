@@ -38,8 +38,8 @@ jobs:
 
       - name: Install System Deps
         run: |
-          apt-get update
-          apt-get install -y libssl-dev libsasl2-dev libldap2-dev
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev libsasl2-dev libldap2-dev
 
       - name: Install Test Requirements
         env:
