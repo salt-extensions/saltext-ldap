@@ -80,6 +80,7 @@ tests = [
     "pytest>=7.2.0",
     "pytest-salt-factories>=1.0.0",
     "pytest-instafail",
+    "python-ldap",
 ]
 
 [project.entry-points."salt.loader"]
